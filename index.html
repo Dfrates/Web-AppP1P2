@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>Web Page App Part Two</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="test.css">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Audiowide">
+    </head>
+    <body>
+	<div class="container">
+            <form method="POST" action="/api">
+                <label>Name:</label>
+                <input name="name" type="text" placeholder="Enter name" required>
+                <label>Email:</label>
+                <input name="email" type="email" placeholder="Enter email" required>
+                <button type="submit">Add User</button>
+            </form>
+
+            <form>
+                <label>ID:</label>
+                <input id="get-id" name="id" type="number" placeholder="Enter ID">
+                <button id="get-btn">Get User</button>
+            </form>
+
+            <div id="result"></div>
+
+            <form>
+                <label>ID:</label>
+                <input id="put-id" name="id" type="number" placeholder="Enter ID">
+                <label>Name:</label>
+                <input id="put-name" name="name" type="text" placeholder="Enter new name">
+                <label>Email:</label>
+                <input id="put-email" name="email" type="email" placeholder="Enter new email">
+                <button id="put-btn">Update User</button>
+            </form>
+  	    <form id="delete-form">
+    		<label>ID:</label>
+    		<input id="delete-id" name="id" type="number" placeholder="Enter ID">
+    		<button id="delete-btn" type="button">Delete User</button>
+	    </form>		
+        </div>
+        <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+        <script>
+		// GET request
+    $('#get-btn').click(function(e) {
+        e.preventDefault();
+        const id = $('#get-id').val();
+        $.ajax({
+            url: `/api?id=${id}`,
+            method: 'GET',
+            success: function(response) {
+                $('#result').html(response);
+            },
+            error: function(jqXHR, textStatus, errorThrown) {
+                $('#result').html(`${textStatus}: ${errorThrown}`);
+            }
+        });
+    });
+
+    // POST request
+    $('form[method="POST"]').submit(function(e) {
+        e.preventDefault();
+        const name = $('input[name="name"]').val();
+        const email = $('input[name="email"]').val();
+        $.ajax({
+            url: '/api',
+            method: 'POST',
+            data: { name: name, email: email },
+            success: function(response) {
+                alert(response);
+            },
+            error: function(jqXHR, textStatus, errorThrown) {
+                alert(`${textStatus}: ${errorThrown}`);
+            }
+        });
+    });
+
+    // PUT request
+    $('#put-btn').click(function(e) {
+        e.preventDefault();
+        const id = $('#put-id').val();
+        const name = $('#put-name').val();
+        const email = $('#put-email').val();
+        $.ajax({
+            url: `/api/${id}`,
+            method: 'PUT',
+            data: { name: name, email: email },
+            success: function(response) {
+                alert(response);
+            },
+            error: function(jqXHR, textStatus, errorThrown) {
+                alert(`${textStatus}: ${errorThrown}`);
+            }
+        });
+    });
+
+    // DELETE request
+    $('#delete-btn').click(function(e) {
+        e.preventDefault();
+        const id = $('#delete-id').val();
+        $.ajax({
+            url: `/api/${id}`,
+            method: 'DELETE',
+	    data: { id: id },
+            success: function(response) {
+		    $('#result').html(response);
+            },
+            error: function(jqXHR, textStatus, errorThrown) {
+		if (jqXHR.status === 404) {
+     	   		alert(jqXHR.responseText);
+    		} else {
+        		alert(`${textStatus}: ${errorThrown}`);
+    		}
+            }
+        });
+    });
+	</script>
+    </body>
+</html>
