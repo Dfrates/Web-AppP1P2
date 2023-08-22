@@ -1,120 +1,399 @@
 <!DOCTYPE html>
 <html>
-    <head>
-        <meta charset="utf-8">
-        <title>Web Page App Part Two</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <link rel="stylesheet" href="test.css">
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Audiowide">
-    </head>
-    <body>
-	<div class="container">
-            <form method="POST" action="/api">
-                <label>Name:</label>
-                <input name="name" type="text" placeholder="Enter name" required>
-                <label>Email:</label>
-                <input name="email" type="email" placeholder="Enter email" required>
-                <button type="submit">Add User</button>
-            </form>
+  <head>
+    <meta charset="utf-8" />
+    <title>Authenticated and Authorized</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+      }
 
-            <form>
-                <label>ID:</label>
-                <input id="get-id" name="id" type="number" placeholder="Enter ID">
-                <button id="get-btn">Get User</button>
-            </form>
+      h1 {
+        font-size: 36px;
+        margin: 0 0 20px 0;
+      }
 
-            <div id="result"></div>
+      h2 {
+        font-size: 24px;
+        margin: 30px 0 10px 0;
+      }
 
-            <form>
-                <label>ID:</label>
-                <input id="put-id" name="id" type="number" placeholder="Enter ID">
-                <label>Name:</label>
-                <input id="put-name" name="name" type="text" placeholder="Enter new name">
-                <label>Email:</label>
-                <input id="put-email" name="email" type="email" placeholder="Enter new email">
-                <button id="put-btn">Update User</button>
-            </form>
-  	    <form id="delete-form">
-    		<label>ID:</label>
-    		<input id="delete-id" name="id" type="number" placeholder="Enter ID">
-    		<button id="delete-btn" type="button">Delete User</button>
-	    </form>		
-        </div>
-        <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-        <script>
-		// GET request
-    $('#get-btn').click(function(e) {
-        e.preventDefault();
-        const id = $('#get-id').val();
-        $.ajax({
-            url: `/api?id=${id}`,
-            method: 'GET',
-            success: function(response) {
-                $('#result').html(response);
-            },
-            error: function(jqXHR, textStatus, errorThrown) {
-                $('#result').html(`${textStatus}: ${errorThrown}`);
+      form {
+        margin: 20px 0;
+      }
+
+      label {
+        display: block;
+        font-weight: bold;
+        margin-bottom: 5px;
+      }
+
+      input[type="text"],
+      input[type="password"],
+      select {
+        font-size: 16px;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        margin-bottom: 10px;
+        width: 100%;
+      }
+
+      button[type="submit"],
+      button[type="button"] {
+        font-size: 16px;
+        padding: 10px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        margin-right: 10px;
+      }
+
+      button[type="submit"] {
+        background-color: #4caf50;
+        color: white;
+      }
+
+      button[type="submit"]:hover {
+        background-color: #45a049;
+      }
+
+      button[type="button"] {
+        background-color: #f44336;
+        color: white;
+      }
+
+      button[type="button"]:hover {
+        background-color: #d32f2f;
+      }
+
+      #error {
+        color: red;
+        margin-bottom: 20px;
+      }
+      #items-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        grid-gap: 20px;
+      }
+
+      .item {
+        background-color: #fff;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        padding: 20px;
+      }
+
+      .item h3 {
+        margin-top: 0;
+      }
+
+      .item p {
+        margin-bottom: 0;
+      }
+      table {
+        border-collapse: collapse;
+        margin-top: 20px;
+      }
+
+      th,
+      td {
+        border: 1px solid black;
+        padding: 5px;
+      }
+
+      th {
+        background-color: #ddd;
+      }
+    </style>
+  </head>
+  <body>
+    <table id="items-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Description</th>
+	  <th>Who</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+	
+
+    <button id="create" disabled>Create</button>
+    <button id="edit" disabled>Edit</button>
+    <button id="remove" disabled>Remove</button>
+
+    <h2>Create Credentials</h2>
+
+    <form id="credentials-form">
+      <label for="username">Username:</label>
+      <input type="text" id="username" name="username" />
+
+      <label for="password">Password:</label>
+      <input type="password" id="password" name="password" />
+
+      <label for="level">Authorization Level:</label>
+      <select id="level" name="level">
+        <option value="admin">Admin</option>
+        <option value="author">Author</option>
+      </select>
+
+      <button type="submit">Create</button>
+    </form>
+
+    <script>
+
+	let currentUser = '';
+      const endpoint = "/api";
+      let token;
+
+      function authenticate() {
+        const username = prompt("Enter your username:");
+        const password = prompt("Enter your password:");
+        const credentials = { username, password };
+
+        fetch(`${endpoint}/auth`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(credentials),
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            token = data.token;
+            console.log(`Authenticated as ${data.username}`);
+            currentUser = data.username;
+            enableButtons();
+          })
+          .catch((error) => console.error(error));
+      }
+
+      function getToken() {
+        authenticate();
+      }
+
+      const getContent = () => {
+        // Fetch content unauthenticated
+        fetch(`${endpoint}/items`)
+          .then((response) => {
+            if (!response.ok) {
+              throw new Error("Network response was not ok");
             }
-        });
-    });
+            return response.text();
+          })
+          .then((data) => {
+		console.log(JSON.parse(data))
+            displayItems(JSON.parse(data));
+          })
+          .catch((error) => {
+            console.error(error);
+            
+          });
+      };
 
-    // POST request
-    $('form[method="POST"]').submit(function(e) {
-        e.preventDefault();
-        const name = $('input[name="name"]').val();
-        const email = $('input[name="email"]').val();
-        $.ajax({
-            url: '/api',
-            method: 'POST',
-            data: { name: name, email: email },
-            success: function(response) {
-                alert(response);
-            },
-            error: function(jqXHR, textStatus, errorThrown) {
-                alert(`${textStatus}: ${errorThrown}`);
-            }
-        });
-    });
+      //      const getUsers = () => {
+      //
+      //     		 fetch(`${endpoint}/credentials`)
+      //                .then(response => {
+      //                if (!response.ok) {
+      //                        throw new Error("Network response was not ok");
+      //                }
+      //                return response.text();
+      //                })
+      //                .then(data => {
+      //                       // console.log(typeof data)
+      //                //      displayData(JSON.parse(data));
+      //                       // displayItems(JSON.parse(data))
+      //                        //document.getElementById('content').textContent = data;
+      //                console.log(`Content: ${data}`);
+      //               })
+      //                .catch(error => {
+      //                console.error(error);
+      //                //document.getElementById('content').textContent = "Failed to load content";
+      //          });
+      //	}
 
-    // PUT request
-    $('#put-btn').click(function(e) {
-        e.preventDefault();
-        const id = $('#put-id').val();
-        const name = $('#put-name').val();
-        const email = $('#put-email').val();
-        $.ajax({
-            url: `/api/${id}`,
-            method: 'PUT',
-            data: { name: name, email: email },
-            success: function(response) {
-                alert(response);
-            },
-            error: function(jqXHR, textStatus, errorThrown) {
-                alert(`${textStatus}: ${errorThrown}`);
-            }
-        });
-    });
+     // const updateItems = async () => {
+     //   const r = await fetch(`${endpoint}/items`);
+     //   const json = await r.json();
+     //   displayItems(json);
+     // };
 
-    // DELETE request
-    $('#delete-btn').click(function(e) {
-        e.preventDefault();
-        const id = $('#delete-id').val();
-        $.ajax({
-            url: `/api/${id}`,
-            method: 'DELETE',
-	    data: { id: id },
-            success: function(response) {
-		    $('#result').html(response);
-            },
-            error: function(jqXHR, textStatus, errorThrown) {
-		if (jqXHR.status === 404) {
-     	   		alert(jqXHR.responseText);
-    		} else {
-        		alert(`${textStatus}: ${errorThrown}`);
-    		}
-            }
+      function displayItems(items) {
+        const tableBody = document.querySelector("#items-table tbody");
+       
+        while (tableBody.firstChild) {
+          tableBody.removeChild(tableBody.firstChild);
+        }
+
+        items.forEach((item) => {
+          const row = tableBody.insertRow();
+
+          const idCell = row.insertCell();
+          const nameCell = row.insertCell();
+          const descCell = row.insertCell();
+	  const whoCell = row.insertCell();
+
+          idCell.textContent = item.id;
+          nameCell.textContent = item.name;
+          descCell.textContent = item.description;
+	  whoCell.textContent = item.who;
         });
-    });
-	</script>
-    </body>
+      }
+
+      function create() {
+        // Create a new item with authentication
+        const itemName = prompt("Enter Item Name: ");
+        const itemDescription = prompt("Enter Description: ");
+        
+	const item = { name: itemName, description: itemDescription, who: currentUser };
+	fetch(`${endpoint}/items`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(item),
+        })
+          .then((response) => response.json())
+          .then((data) => console.log(`Created item: ${JSON.stringify(data)}`))
+          .then(getContent())
+          .catch((error) => console.error(error));
+      }
+
+      function edit() {
+        // Edit an existing item with authentication
+        const id = prompt("Id to edit: ");
+	const editedName = prompt("New Name");
+	const editedDesc = prompt("New Description");
+        const item = {
+          name: editedName,
+          description: editedDesc,
+	  who: currentUser
+        };
+        fetch(`${endpoint}/items/${id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(item),
+        })
+          .then((response) => {
+      		if (!response.ok) {
+        		throw new Error("Network response was not ok");
+      		}
+      		return response.text();
+    	  })
+	  .then(getContent())
+	  .catch((error) => console.error(error));
+      }
+
+      function remove() {
+        const id = prompt("Id to remove: ");
+        //Remove an existing item with authentication
+        fetch(`${endpoint}/items/${id}`, {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        })
+          .then((response) =>
+            console.log(`Removed item, status: ${response.status}`)
+          )
+          .then(getContent())
+          .catch((error) => console.error(error));
+      }
+
+      function createCredentials(event) {
+        event.preventDefault();
+        const userName = document.getElementById("username").value;
+        const userPassword = document.getElementById("password").value;
+        const userLevel = document.getElementById("level").value.toLowerCase();
+        const credentials = {
+          username: userName,
+          password: userPassword,
+          level: userLevel,
+        };
+
+        fetch(`${endpoint}/credentials`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(credentials),
+        })
+          .then((response) => response.json())
+          .catch((error) => console.error(error));
+      }
+
+      const grid = document.querySelector(".grid");
+      function displayData(items) {
+        const grid = document.getElementById("items-grid");
+        grid.innerHTML = "";
+
+        items.forEach((item) => {
+          const div = document.createElement("div");
+          div.classList.add("item");
+
+          const name = document.createElement("h3");
+          name.textContent = item.name;
+
+          const description = document.createElement("p");
+          description.textContent = item.description;
+
+          div.appendChild(name);
+          div.appendChild(description);
+          grid.appendChild(div);
+        });
+      }
+
+      function enableButtons() {
+        // Enable buttons once authenticated
+        document.getElementById("create").disabled = false;
+        document.getElementById("edit").disabled = false;
+        document.getElementById("remove").disabled = false;
+      }
+
+      // Call functions once page has loaded
+      window.onload = () => {
+        getContent();
+	getToken();
+        // getUsers();
+        document.getElementById("create").addEventListener("click", create);
+        document.getElementById("edit").addEventListener("click", edit);
+        document.getElementById("remove").addEventListener("click", remove);
+        document
+          .getElementById("credentials-form")
+          .addEventListener("submit", createCredentials);
+      };
+
+	// Create a new Web Worker
+const worker = new Worker('pollingWorker.js');
+
+// Send a message to the worker to start polling
+worker.postMessage({ action: 'startPolling' });
+
+// Listen for messages from the worker
+worker.onmessage = function(event) {
+  // Handle messages from the worker
+  if (event.data.action === 'updateItems') {
+    displayItems(event.data.items);
+  }
+};
+
+// Handle errors from the worker
+worker.onerror = function(error) {
+  console.error(error);
+};
+	
+    </script>
+  </body>
 </html>
+

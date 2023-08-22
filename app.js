@@ -1,86 +1,258 @@
 #!/usr/bin/env node
-const express = require('express');
+const crypto = require("crypto");
+const express = require("express");
+const bodyParser = require("body-parser");
 const app = express();
-
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
-
-const https = require('https');
-const fs = require('fs');
-
-// Read the SSL certificate and key pair
-const options = {
- 	key: fs.readFileSync('/etc/letsencrypt/live/dfrates.chickenkiller.com/privkey.pem'),
- 	cert: fs.readFileSync('/etc/letsencrypt/live/dfrates.chickenkiller.com/fullchain.pem')
-};
+const port = 3000;
+const sqlite3 = require("sqlite3").verbose();
+const db = new sqlite3.Database("data.db");
+let currentLevel = "";
 
 
-// temporary
-let users = [];
+function sha256(data) {
+  const hash = crypto.createHash("sha256");
+  hash.update(data);
+  return hash.digest("hex");
+}
+// Middleware
+app.use(bodyParser.json());
 
-// temporary
-users = [];
+// Authentication endpoint
+app.post("/auth", (req, res) => {
+  const { username, password } = req.body;
+  // Search for the user in the database
+  db.get("SELECT * FROM users WHERE username = ?", [username], (err, row) => {
+    // If there was an error or no user was found, return an unauthorized error
+    if (err || !row) {
+      res.status(401).send("Unauthorized");
+      return;
+    }
+    //console.log(row);
+    currentLevel = row.level.toLowerCase();
 
-// GET /api
-app.get('/api', (req, res) => {
-	const id = parseInt(req.query.id);
-  	const user = users.find(u => u.id === id);
-	if (isNaN(id)) {
-		res.json(users);
-	}
-  	if (user) {
-		res.set('Cache-Control', 'no-cache'); // add Cache-Control header
-    		res.send(`User found with id ${id}: ${JSON.stringify(user)}`);
-  	} else {
-    		res.status(404).send(`No user found with id ${id}`);
-  	}
+    // Verify the password
+    const hashedPassword = sha256(password);
+    if (hashedPassword !== row.password) {
+      res.status(401).send("Unauthorized");
+      return;
+    }
+
+    // Successful authentication
+    const token = "abc123";
+    res.json({ username, token });
+  });
 });
 
-// POST /api
-app.post('/api', (req, res) => {
-        const { name, email } = req.body;
-        if (name && email) {
-		const id = users.length + 1;
-		const user = {id, name, email };
-		console.log(user);
-  		users.push(user);
-                res.status(201).send(`Received a POST request to the API with name=${name} and email=${email}!`);
-        } else {
-                res.status(400).send('Bad Request: name and email are required fields.');
+// Unauthenticated Content endpoint
+app.get("/content", (req, res) => {
+  const content = "This is some content";
+  res.send(content);
+});
+
+// Unauthenticated GET for items
+app.get("/items", (req, res) => {
+  // Retrieve all items from the database
+  db.all("SELECT * FROM items", (err, rows) => {
+    if (err) {
+      res.status(500).send(err.message);
+    } else {
+	console.log(rows)
+      res.json(rows);
+    }
+  });
+});
+
+//Authenticated POST to items
+app.post("/items", (req, res) => {
+  // Authenticate token
+  const token = req.headers.authorization.split(" ")[1];
+  if (token !== "abc123") {
+    res.status(401).send("Unauthorized");
+    return;
+  }
+
+  // Extract data from request body
+  const { name, description, who } = req.body;
+
+  // Validate data
+  if (!name || !description) {
+    res.status(400).send("Name and description are required");
+    return;
+  }
+
+  // Insert new item into database
+  db.run(
+    "INSERT INTO items (name, description, who) VALUES (?, ?, ?)",
+    [name, description, who],
+    (error) => {
+      if (error) {
+        console.error(error);
+        res.status(500).send("Internal Server Error");
+        return;
+      }
+
+      // Get the ID of the newly inserted item
+      const newItemId = this.lastID;
+
+      // Return the newly inserted item
+      db.get("SELECT * FROM items WHERE id = ?", [newItemId], (error, row) => {
+        if (error) {
+          console.error(error);
+          res.status(500).send("Internal Server Error");
+          return;
         }
-});
-
-// PUT /api
-app.put('/api/:id', (req, res) => {
-    const id = parseInt(req.params.id);
-    const { name, email } = req.body;
-    const user = users.find(u => u.id === id);
-    if (!user) {
-        res.status(404).send(`No user found with id ${id}`);
-    } else if (name && email) {
-        user.name = name;
-        user.email = email;
-        res.send(`User with id ${id} has been updated`);
-    } else {
-        res.status(400).send('Bad Request: name and email are required fields.');
+        res.status(201).json(row);
+      });
     }
+  );
 });
 
-// DELETE /api
-app.delete('/api/:id', (req, res) => {
-    const id = parseInt(req.params.id);
-    const userIndex = users.findIndex(u => u.id === id);
-	console.log(userIndex);
-    if (userIndex === -1) {
-        res.status(404).send(`No user found with id ${id}`);
-    } else {
-	res.set('Cache-Control', 'no-cache'); // add Cache-Control header
-	res.send(`User with id ${id} was deleted.`);
-	users.splice(userIndex, 1);
+// Authenticated PUT to items
+app.put("/items/:id", (req, res) => {
+  // Authenticate token
+  const token = req.headers.authorization.split(" ")[1];
+  if (token !== "abc123") {
+    res.status(401).send("Unauthorized");
+    return;
+  }
+
+  // Find item by id and update
+  const { id } = req.params;
+  db.get("SELECT * FROM items WHERE id = ?", [id], (error, row) => {
+    if (error) {
+      console.error(error);
+      res.status(500).send("Internal Server Error");
+      return;
     }
+
+    if (!row) {
+      res.status(404).send("Not found");
+    } else {
+      const updatedItem = { ...row, ...req.body };
+      const { name, description, who } = updatedItem;
+      db.run(
+        "UPDATE items SET name = ?, description = ?, who = ? WHERE id = ?",
+        [name, description, who, id],
+        (error) => {
+          if (error) {
+            console.error(error);
+            res.status(500).send("Internal Server Error");
+            return;
+          }
+          res.status(201);
+        }
+      );
+    }
+  });
 });
 
+// Authenticated DELETE of items
+app.delete("/items/:id", (req, res) => {
+  // Authenticate token
+  const token = req.headers.authorization.split(" ")[1];
+  if (token !== "abc123") {
+    res.status(401).send("Unauthorized");
+    return;
+  }
 
-https.createServer(options, app).listen(3000, () => {
-  console.log('Server started on port 3000');
+  // Find item by id and remove
+  const { id } = req.params;
+  db.get("SELECT * FROM items WHERE id = ?", [id], (error, row) => {
+    if (error) {
+      console.error(error);
+      res.status(500).send("Internal Server Error");
+      return;
+    }
+
+    if (!row) {
+      res.status(404).send("Not found");
+    } else {
+      db.run("DELETE FROM items WHERE id = ?", [id], (error) => {
+        if (error) {
+          console.error(error);
+          res.status(500).send("Internal Server Error");
+          return;
+        }
+        res.sendStatus(204);
+      });
+    }
+  });
 });
+
+// Credentials endpoint
+app.post("/credentials", (req, res) => {
+  // Authenticate token
+  const token = req.headers.authorization.split(" ")[1];
+  if (token !== "abc123") {
+    res.status(401).send("Unauthorized");
+    return;
+  }
+  // Create new credentials
+  const { username, password, level } = req.body;
+  db.get(
+    `SELECT username FROM users WHERE username = ?`,
+    [username],
+    (error, row) => {
+      if (error) {
+        console.error(error);
+        res.status(500).send("Internal Server Error");
+        return;
+      }
+      if (currentLevel === "author") {
+        res.status(401).send("Authors cannot create credentials");
+        return;
+      }
+      if (!row) {
+        db.run(
+          `INSERT INTO users (username, password, level) VALUES (?, ?, ?)`,
+          [username, sha256(password), level],
+          (error, row) => {
+            if (error) {
+              console.error(error);
+              res.status(500).send("Internal Server Error");
+              return;
+            }
+            // Get the ID of the newly inserted user
+            const newUserId = this.lastID;
+
+            // Return the newly inserted user
+            db.get(
+              "SELECT username FROM users WHERE uid = ?",
+              [newUserId],
+              (error, name) => {
+                if (error) {
+                  console.error(error);
+                  res.status(500).send("Internal Server Error");
+                  return;
+                }
+                res.status(201).json(name);
+                return;
+              }
+            );
+          }
+        );
+      } else {
+        res.status(400).send("username already exists");
+        return;
+      }
+    }
+  );
+});
+
+// Get all credentials
+//app.get('/credentials', (req, res) => {
+//	db.all('SELECT username, level FROM users', (err, rows) => {
+//    if (err) {
+//      res.status(500).send(err.message);
+//    } else {
+//      res.json(rows);
+//    }
+//  });
+//
+//})
+
+// Start server
+app.listen(port, () => {
+  console.log("Server running on port ${port}");
+});
+
